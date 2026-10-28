@@ -152,3 +152,10 @@ Luego de la configuración de hardening, CSP y estrategia de caché:
 3. **Costo:**
    * Firebase Hosting en modo estático opera dentro del plan **Spark gratuito** (cero costo, sin tarjeta de crédito).
    * Al requerir SSR (Cloud Run / App Hosting), es obligatorio pasar al plan **Blaze** (facturación por consumo), donde se factura CPU, memoria por tiempo de ejecución de las instancias, invocaciones y egress de red, además del riesgo de costos imprevistos ante picos de tráfico si no se configuran límites estrictos de concurrencia.
+
+---
+
+## 4. Estado Final de Entrega
+* ✅ Batería de pruebas locales y de seguridad superada al 100%.
+* ✅ Pipelines de CI/CD de preview y producción validados.
+* ✅ Aplicación completamente endurecida y funcional en producción.
