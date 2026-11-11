@@ -360,14 +360,75 @@ puede hablar con los servicios que la app realmente usa (mínimo privilegio tamb
 ### Salida de `npm run test:reglas`
 
 ```text
-PENDIENTE: pegar la salida con todos los tests en verde
+> practica-firebase-cicd@1.0.0 test:reglas
+> firebase emulators:exec --only firestore "node --test tests/"
+
+i  emulators: Starting emulators: firestore
+✔  firestore: Firestore Emulator was started in standard edition.
+i  Running script: node --test tests/
+✔ cualquiera puede leer reseñas, incluso sin login (447.060708ms)
+✔ Ana puede crear SU reseña (77.689041ms)
+✔ Ana NO puede crear una reseña a nombre de Bruno (23.05775ms)
+✔ sin login no se puede escribir (16.264958ms)
+✔ puntaje fuera de rango o con decimales se rechaza (27.891958ms)
+✔ no se pueden agregar campos extra (p. ej. destacada: true) (17.569166ms)
+✔ la fecha de creación la pone el servidor y no se puede cambiar (38.1905ms)
+✔ el cliente no puede escribir el documento del curso (15.9085ms)
+✔ Bruno NO puede editar la reseña de Ana (22.974375ms)
+✔ Bruno NO puede borrar la reseña de Ana, pero Ana sí puede borrar la suya (30.321083ms)
+✔ sin login no se puede borrar (23.314458ms)
+✔ tipos y tamaños: puntaje como texto, texto > 500, autor > 80 o vacío se rechazan (40.747875ms)
+✔ faltar un campo obligatorio se rechaza (14.429334ms)
+✔ una edición no puede agregar campos extra (23.170041ms)
+✔ cualquier otra colección está cerrada (24.969792ms)
+ℹ tests 15
+ℹ pass 15
+ℹ fail 0
+ℹ duration_ms 1065.928042
+✔  Script exited successfully (code 0)
 ```
+
+Entre los tests el SDK imprime líneas `PERMISSION_DENIED: false for 'create' @ L37 ...` (omitidas
+arriba): son los rechazos esperados de los `assertFails`, e indican en qué línea de
+`firestore.rules` se cortó la evaluación.
 
 ### Prueba de "hacerlo fallar" (`puntaje <= 5` → `puntaje <= 6`)
 
 ```text
-PENDIENTE: pegar la salida con el test en rojo
+$ sed -i '' 's/d.puntaje <= 5/d.puntaje <= 6/' firestore.rules && npm run test:reglas
+
+✔ cualquiera puede leer reseñas, incluso sin login (412.258208ms)
+✔ Ana puede crear SU reseña (80.089166ms)
+✔ Ana NO puede crear una reseña a nombre de Bruno (22.353125ms)
+✔ sin login no se puede escribir (17.400167ms)
+✖ puntaje fuera de rango o con decimales se rechaza (18.648459ms)
+✔ no se pueden agregar campos extra (p. ej. destacada: true) (19.65075ms)
+✔ la fecha de creación la pone el servidor y no se puede cambiar (39.070667ms)
+✔ el cliente no puede escribir el documento del curso (15.059ms)
+✔ Bruno NO puede editar la reseña de Ana (20.6215ms)
+✔ Bruno NO puede borrar la reseña de Ana, pero Ana sí puede borrar la suya (28.965708ms)
+✔ sin login no se puede borrar (24.75525ms)
+✔ tipos y tamaños: puntaje como texto, texto > 500, autor > 80 o vacío se rechazan (41.710334ms)
+✔ faltar un campo obligatorio se rechaza (14.793875ms)
+✔ una edición no puede agregar campos extra (22.957041ms)
+✔ cualquier otra colección está cerrada (26.700667ms)
+ℹ tests 15
+ℹ pass 14
+ℹ fail 1
+
+✖ failing tests:
+
+test at tests/reglas.test.mjs:56:1
+✖ puntaje fuera de rango o con decimales se rechaza (18.648459ms)
+  Error: Expected request to fail, but it succeeded.
+      at async TestContext.<anonymous> (tests/reglas.test.mjs:59:3)
+⚠  Script exited unsuccessfully (code 1)
 ```
+
+Con la regla debilitada, `setDoc(..., { puntaje: 6 })` (línea 59 del test) **se aceptó** y
+`assertFails` lo detectó: el test prueba de verdad el límite superior del rango. Solo falló ese test,
+lo que confirma que cada caso cubre una regla distinta. Después se volvió a `puntaje <= 5` y la suite
+quedó otra vez en 15/15.
 
 ### Índices: emulador vs. producción
 
