@@ -210,13 +210,40 @@ repetir sin miedo (doble click, reintento de red).
 ### Antes de corregir (repo de la cátedra, sin L1–L5 y con `ListAlumnos` PUBLIC)
 
 ```text
-PENDIENTE: pegar la salida real de `npm run atacar` antes de los cambios
+Auditoría de SQL Connect · proyecto practica-cicd-jenaro · emuladores locales
+
+✔ ListCursos responde sin login (7 cursos) — público por diseño
+✘ ListAlumnos devuelve datos personales SIN login
+    Ejemplo filtrado: {"email":"ana@ejemplo.test","id":"seed-uid-ana","nombre":"Ana Ficticia"}
+… Inscribirme todavía no existe (TODO L2)
+    operation "Inscribirme" not found
+… No se pudo inscribir al usuario A: no se pueden probar los controles de aislamiento
+    operation "Inscribirme" not found
+
+❌ 1 vulnerabilidad(es) · 2 pendiente(s)
 ```
+
+**Lectura:** la auditoría encontró la fuga de datos personales (`ListAlumnos` PUBLIC devolvía
+id, nombre y email de cualquier alumno sin login). No pudo probar idempotencia ni aislamiento entre
+usuarios porque `Inscribirme`, `MisInscripciones` y `DarmeDeBaja` todavía no existían.
 
 ### Después de corregir
 
 ```text
-PENDIENTE: pegar la salida real de `npm run atacar` después de los cambios
+Auditoría de SQL Connect · proyecto practica-cicd-jenaro · emuladores locales
+
+✔ ListCursos responde sin login (7 cursos) — público por diseño
+✔ ListAlumnos rechazada para un cliente
+    unauthorized: you are not authorized to perform this operation
+    (debugDetails: "@auth(level: NO_ACCESS) always reject non-admin requests")
+✔ Inscribirme rechazada sin login
+    unauthenticated: this operation requires a signed-in user
+    (debugDetails: "@auth(level: USER) requires a signed-in user")
+✔ Inscribirme es idempotente (repetir no falla)
+✔ MisInscripciones solo devuelve lo del usuario que llama
+✔ B no puede dar de baja a A
+
+✅ Todos los controles pasaron
 ```
 
 ## 4. Preguntas de reflexión

@@ -10,10 +10,10 @@
  * si estos valores son reales. Para producción tenés que completarlos.
  */
 export const firebaseConfig = {
-  apiKey: "REEMPLAZAR",
+  apiKey: "AIzaSyD4-rZXpusHqqj7yuEQzvVIxKYwlVuz9oU",
   authDomain: "practica-cicd-jenaro.firebaseapp.com",
   projectId: "practica-cicd-jenaro",
-  appId: "REEMPLAZAR",
+  appId: "1:1026088036685:web:630d268e5d17264d8d2f04",
 };
 
 /** Debe coincidir con dataconnect/dataconnect.yaml y dataconnect/cursos/connector.yaml */
