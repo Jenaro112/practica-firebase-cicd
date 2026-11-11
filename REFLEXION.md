@@ -339,7 +339,7 @@ puede hablar con los servicios que la app realmente usa (mínimo privilegio tamb
 | **1** | `lib/resenas.ts`, `app/components/ResenasCurso.tsx`, `firestore.rules`, `firestore.indexes.json`, `tests/` | [Repositorio](https://github.com/Jenaro112/practica-firebase-cicd) |
 | **2** | Salida de `npm run test:reglas` y prueba de "hacerlo fallar" | Ver abajo |
 | **3** | Actualización en tiempo real entre dos navegadores | [Captura](docs/capturas/tiempo-real.png) · ver sección "Tiempo real" |
-| **4** | PR mergeado con reglas, índice y CSP | _PENDIENTE: URL del PR_ |
+| **4** | PR mergeado con reglas, índice y CSP | [PR #3: Práctica 4 · Firestore](https://github.com/Jenaro112/practica-firebase-cicd/pull/3) |
 | **5** | Respuestas a la reflexión | Ver abajo |
 
 ### Qué se implementó
