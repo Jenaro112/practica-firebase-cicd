@@ -175,7 +175,7 @@ Luego de la configuración de hardening, CSP y estrategia de caché:
 |---|---|---|
 | **1** | Repo con `dataconnect/` completo (L1–L5) | [https://github.com/Jenaro112/practica-firebase-cicd/tree/main/dataconnect](https://github.com/Jenaro112/practica-firebase-cicd/tree/main/dataconnect) |
 | **2** | Salida de `npm run atacar` antes y después | Ver sección 3 |
-| **3** | PR mergeado con el cambio de CSP (L6) | _PENDIENTE: pegar URL del PR_ |
+| **3** | PR mergeado con el cambio de CSP (L6) | [PR #2: Clase 2 · SQL Connect + CSP](https://github.com/Jenaro112/practica-firebase-cicd/pull/2) |
 | **4** | Producción con inscripción funcionando (L7) | [https://practica-cicd-jenaro.web.app/cursos](https://practica-cicd-jenaro.web.app/cursos) |
 | **5** | Respuestas a la reflexión | Sección 4 |
 
