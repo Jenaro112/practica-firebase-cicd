@@ -323,3 +323,226 @@ de APIs de Google, incluidas algunas donde un atacante puede tener su propio pro
 `connect-src` es la última barrera contra la exfiltración de datos. Con un comodín amplio podría
 mandar tokens o datos personales a un endpoint de Google que controle. Con la lista exacta, solo se
 puede hablar con los servicios que la app realmente usa (mínimo privilegio también en la red).
+
+---
+---
+
+## Práctica 4 · Firestore
+
+**Programación Avanzada - 2026** · Reseñas de cursos en tiempo real con Cloud Firestore  
+**Alumno:** Jenaro Galdini  
+
+### Entregables
+
+| # | Entregable | Valor / Enlace |
+|---|---|---|
+| **1** | `lib/resenas.ts`, `app/components/ResenasCurso.tsx`, `firestore.rules`, `firestore.indexes.json`, `tests/` | [Repositorio](https://github.com/Jenaro112/practica-firebase-cicd) |
+| **2** | Salida de `npm run test:reglas` y prueba de "hacerlo fallar" | Ver abajo |
+| **3** | Actualización en tiempo real entre dos navegadores | [Captura](docs/capturas/tiempo-real.png) · ver sección "Tiempo real" |
+| **4** | PR mergeado con reglas, índice y CSP | _PENDIENTE: URL del PR_ |
+| **5** | Respuestas a la reflexión | Ver abajo |
+
+### Qué se implementó
+
+| Paso | Archivo | Detalle |
+|---|---|---|
+| 1 | `lib/resenas.ts` | `firestore()` reutiliza la app de `lib/firebase.ts` y en desarrollo se conecta al emulador (`127.0.0.1:8080`). |
+| 2 | `app/components/ResenasCurso.tsx` + `CatalogoSql.tsx` | Cada tarjeta del catálogo tiene "Ver reseñas": el listener solo existe mientras la sección está abierta. |
+| 3 | `guardarResena` / `borrarResena` | Id del documento = UID; `serverTimestamp()` al crear; `{ merge: true }` sin `creadaEn` al editar. |
+| 4 | `escucharResenas` | `onSnapshot` con `orderBy("creadaEn","desc")` + `limit(20)`, cancelado en el `return` del `useEffect`. Con `includeMetadataChanges` se muestra el estado **"enviando…"** (`hasPendingWrites`) hasta que el servidor confirma. |
+| 4b | `escucharMiResena` | Lectura por id de la reseña propia: el formulario sabe si crear o editar aunque la reseña no esté entre las 20 últimas o el filtro "solo 5" la oculte (si no, mandaría un `serverTimestamp` nuevo y la regla de update lo rechazaría). |
+| 5 | `resumenDe` | `getAggregateFromServer` con `count()` y `average("puntaje")`; se recalcula cuando cambia la lista. |
+| 6 | `firestore.rules` | Identidad (`esDuenio`), lista blanca de campos, tipos y rangos, fecha del servidor e inmutable, cursos de solo lectura, resto cerrado. **Límites extra:** `texto` y `autor` no pueden estar vacíos, y `creadaEn` tiene que ser `timestamp`. |
+| 7 | `tests/reglas.test.mjs` | Los 8 casos del enunciado + 7 propios: edición ajena, borrado ajeno, borrado sin login, tipos/tamaños (puntaje `"5"`, texto > 500, autor > 80 o vacío, límites exactos 500/80 aceptados), campo faltante, campo extra al editar, otras colecciones cerradas. |
+| 8 | `firestore.indexes.json` | Índice compuesto `resenas`: `puntaje ASC` + `creadaEn DESC`. |
+| 9 | `firebase.json` | Clave `firestore` (rules + indexes), emulador en el puerto 8080 y `https://firestore.googleapis.com` en `connect-src`. |
+
+### Tiempo real entre dos navegadores
+
+![Ana (Safari, izquierda) y Bruno (navegación privada, derecha) viendo el mismo curso](docs/capturas/tiempo-real.png)
+
+Ana (izquierda) editó su reseña a ★★★★★ "Muy claro, buenos ejemplos de normalización" y la lista de
+Bruno (derecha) se actualizó sola por `onSnapshot`, sin recargar.
+
+**Evidencia de la limitación de la agregación:** en la ventana de Ana el resumen quedó en
+"★ 3.0 (1)" (el puntaje anterior) mientras en la de Bruno ya decía "★ 5.0 (1)". El componente
+pidió `getAggregateFromServer` cuando la lista cambió *localmente* (compensación de latencia),
+antes de que el servidor confirmara la escritura, y el servidor todavía devolvió el promedio viejo.
+Como la agregación no admite listeners, nada lo volvió a pedir. **Corrección:** la "firma" que
+dispara el recálculo ahora incluye `hasPendingWrites`, así el resumen se pide de nuevo cuando la
+escritura pasa de pendiente a confirmada.
+
+### Salida de `npm run test:reglas`
+
+```text
+> practica-firebase-cicd@1.0.0 test:reglas
+> firebase emulators:exec --only firestore "node --test tests/"
+
+i  emulators: Starting emulators: firestore
+✔  firestore: Firestore Emulator was started in standard edition.
+i  Running script: node --test tests/
+✔ cualquiera puede leer reseñas, incluso sin login (447.060708ms)
+✔ Ana puede crear SU reseña (77.689041ms)
+✔ Ana NO puede crear una reseña a nombre de Bruno (23.05775ms)
+✔ sin login no se puede escribir (16.264958ms)
+✔ puntaje fuera de rango o con decimales se rechaza (27.891958ms)
+✔ no se pueden agregar campos extra (p. ej. destacada: true) (17.569166ms)
+✔ la fecha de creación la pone el servidor y no se puede cambiar (38.1905ms)
+✔ el cliente no puede escribir el documento del curso (15.9085ms)
+✔ Bruno NO puede editar la reseña de Ana (22.974375ms)
+✔ Bruno NO puede borrar la reseña de Ana, pero Ana sí puede borrar la suya (30.321083ms)
+✔ sin login no se puede borrar (23.314458ms)
+✔ tipos y tamaños: puntaje como texto, texto > 500, autor > 80 o vacío se rechazan (40.747875ms)
+✔ faltar un campo obligatorio se rechaza (14.429334ms)
+✔ una edición no puede agregar campos extra (23.170041ms)
+✔ cualquier otra colección está cerrada (24.969792ms)
+ℹ tests 15
+ℹ pass 15
+ℹ fail 0
+ℹ duration_ms 1065.928042
+✔  Script exited successfully (code 0)
+```
+
+Entre los tests el SDK imprime líneas `PERMISSION_DENIED: false for 'create' @ L37 ...` (omitidas
+arriba): son los rechazos esperados de los `assertFails`, e indican en qué línea de
+`firestore.rules` se cortó la evaluación.
+
+### Prueba de "hacerlo fallar" (`puntaje <= 5` → `puntaje <= 6`)
+
+```text
+$ sed -i '' 's/d.puntaje <= 5/d.puntaje <= 6/' firestore.rules && npm run test:reglas
+
+✔ cualquiera puede leer reseñas, incluso sin login (412.258208ms)
+✔ Ana puede crear SU reseña (80.089166ms)
+✔ Ana NO puede crear una reseña a nombre de Bruno (22.353125ms)
+✔ sin login no se puede escribir (17.400167ms)
+✖ puntaje fuera de rango o con decimales se rechaza (18.648459ms)
+✔ no se pueden agregar campos extra (p. ej. destacada: true) (19.65075ms)
+✔ la fecha de creación la pone el servidor y no se puede cambiar (39.070667ms)
+✔ el cliente no puede escribir el documento del curso (15.059ms)
+✔ Bruno NO puede editar la reseña de Ana (20.6215ms)
+✔ Bruno NO puede borrar la reseña de Ana, pero Ana sí puede borrar la suya (28.965708ms)
+✔ sin login no se puede borrar (24.75525ms)
+✔ tipos y tamaños: puntaje como texto, texto > 500, autor > 80 o vacío se rechazan (41.710334ms)
+✔ faltar un campo obligatorio se rechaza (14.793875ms)
+✔ una edición no puede agregar campos extra (22.957041ms)
+✔ cualquier otra colección está cerrada (26.700667ms)
+ℹ tests 15
+ℹ pass 14
+ℹ fail 1
+
+✖ failing tests:
+
+test at tests/reglas.test.mjs:56:1
+✖ puntaje fuera de rango o con decimales se rechaza (18.648459ms)
+  Error: Expected request to fail, but it succeeded.
+      at async TestContext.<anonymous> (tests/reglas.test.mjs:59:3)
+⚠  Script exited unsuccessfully (code 1)
+```
+
+Con la regla debilitada, `setDoc(..., { puntaje: 6 })` (línea 59 del test) **se aceptó** y
+`assertFails` lo detectó: el test prueba de verdad el límite superior del rango. Solo falló ese test,
+lo que confirma que cada caso cubre una regla distinta. Después se volvió a `puntaje <= 5` y la suite
+quedó otra vez en 15/15.
+
+### Índices: emulador vs. producción
+
+El emulador de Firestore **no exige índices compuestos**: la consulta `where("puntaje", "==", 5)` +
+`orderBy("creadaEn", "desc")` funciona en desarrollo aunque el índice no exista. En producción la
+misma consulta falla con `FAILED_PRECONDITION` ("The query requires an index"). Los índices de un
+solo campo se crean automáticamente, pero los que combinan igualdad sobre un campo y orden sobre
+otro hay que declararlos. Por eso el índice vive en `firestore.indexes.json` y se despliega con
+`firebase deploy --only firestore:indexes`: queda versionado, pasa por revisión en el PR y cualquier
+entorno nuevo se puede reproducir sin clicks en la consola.
+
+### Preguntas de reflexión
+
+**1. ¿Por qué el id del documento es el UID? ¿Qué tendrías que agregar si usaras ids aleatorios con `addDoc`?**  
+Porque convierte la regla de negocio "una reseña por persona y curso" en una propiedad de la
+estructura. La ruta `cursos/{cursoId}/resenas/{uid}` solo admite un documento por usuario, así que
+escribir de nuevo actualiza la misma reseña en lugar de duplicarla, sin consultas previas ni
+condiciones de carrera. Además la regla de identidad queda trivial: `request.auth.uid == uid`
+compara la ruta con el token.  
+Con ids aleatorios habría que:
+- guardar el autor en un campo (`autorUid`) y exigir en las reglas
+  `request.resource.data.autorUid == request.auth.uid` al crear, y
+  `resource.data.autorUid == request.auth.uid` (además de que no cambie) al editar y borrar;
+- impedir duplicados, que las reglas no pueden hacer por sí solas porque no pueden consultar "¿ya
+  existe otra reseña de este usuario?". Se necesitaría un documento índice (`cursos/{id}/autores/{uid}`)
+  escrito en un `batch`, con una regla que use `existsAfter()`/`getAfter()`, o una Cloud Function o
+  transacción del lado del servidor;
+- en el cliente, buscar la reseña propia con `where("autorUid", "==", uid)` (otra consulta) para
+  editarla.
+
+**2. La reseña guarda una copia del nombre del autor. ¿Qué ganás y qué perdés? ¿Cómo resolverías el cambio de nombre?**  
+*Gano:* mostrar la lista cuesta solo las lecturas de las reseñas (máximo 20). Sin la copia, habría
+que leer además el perfil de cada autor: hasta 20 lecturas extra por visita, más latencia y más
+código. En Firestore no hay JOINs: la desnormalización es la forma idiomática de modelar lecturas
+frecuentes.  
+*Pierdo:* consistencia. Si alguien cambia su nombre, sus reseñas viejas muestran el anterior, y el
+dato vive en N lugares.  
+*Cómo resolverlo:*
+- Una **Cloud Function** que, ante un cambio de nombre (trigger sobre `usuarios/{uid}` o tras
+  `updateProfile`), recorra las reseñas del usuario con una consulta de *collection group*
+  (`collectionGroup("resenas")` filtrando por id de documento = uid) y las actualice en lotes
+  (`BulkWriter`), con privilegios de admin. Es consistencia eventual, pero automática.
+- Alternativa en el cliente: al cambiar el nombre, actualizar las propias reseñas con `merge`, ya que
+  las reglas permiten editar `autor`. Es más frágil (si se cierra la pestaña queda a medias).
+- O aceptarlo como decisión de producto: el nombre de la reseña es "como firmaste en ese momento".
+
+**3. ¿Qué diferencia hay entre `resource.data` y `request.resource.data`? Ejemplo.**  
+`resource.data` es el documento **tal como está guardado** antes de la operación (no existe en un
+`create`). `request.resource.data` es el documento **como quedaría** si se permite la escritura. En un
+`update` con `merge` incluye los campos que no se mandaron, tomados del documento actual. Comparar
+los dos permite expresar invariantes entre el antes y el después. Ejemplo, la regla de edición:
+```
+allow update: if esDuenio(uid)
+  && resenaValida()                                                  // el resultado es válido
+  && request.resource.data.creadaEn == resource.data.creadaEn;       // la fecha no cambió
+```
+Otro ejemplo: limitar cuánto puede cambiar el puntaje por edición:
+`(request.resource.data.puntaje - resource.data.puntaje) <= 2`.
+
+**4. ¿Por qué la creación exige `creadaEn == request.time` en lugar de confiar en la fecha del cliente?**  
+Porque todo lo que viene del cliente lo controla el usuario: el reloj del dispositivo puede estar mal
+y, sobre todo, cualquiera puede llamar al SDK desde la consola con `creadaEn: new Date(2020,0,1)`
+para que su reseña parezca antigua o aparezca siempre primera en la lista (que se ordena por fecha).
+`request.time` es la hora del servidor en el momento de evaluar la regla, y `serverTimestamp()` se
+resuelve justamente a ese valor. Exigir la igualdad obliga a usar `serverTimestamp()` y hace la
+fecha inviolable. Es el mismo principio que `auth.uid` en SQL Connect: **los datos que importan para
+la seguridad o la integridad los pone el servidor, no el cliente.**
+
+**5. ¿Qué limitación tiene `getAggregateFromServer` y cómo afecta la experiencia? ¿Alternativas?**  
+No admite listeners ni funciona offline: es una consulta puntual. El promedio y la cantidad no se
+actualizan solos cuando otra persona publica, y el componente tiene que volver a pedirlos (acá, cuando
+cambia la lista recibida por `onSnapshot`). Eso cuesta una lectura extra en cada cambio y puede mostrar
+un resumen desfasado unos instantes respecto de la lista, o directamente desactualizado si la reseña
+nueva no entra en las 20 últimas. Sin conexión no hay resumen.  
+Alternativas:
+- **Calcularlo en el cliente** a partir de las reseñas cargadas. Es gratis y en tiempo real, pero
+  incorrecto si hay más de 20.
+- **Mantener un resumen desnormalizado** en `cursos/{cursoId}` (`cantidad`, `suma`, `promedio`),
+  actualizado por una **Cloud Function** en cada alta, edición o baja de reseña (o con transacciones y
+  `increment()`). El cliente lo escucha con `onSnapshot` y obtiene un promedio en tiempo real a costo de
+  una sola lectura. Es lo que se hará en la Práctica 5, y por eso las reglas ya prohíben al cliente
+  escribir `cursos/{cursoId}`.
+- Recalcular periódicamente (por ejemplo, una función programada) si no hace falta precisión inmediata.
+
+**6. Para inscripciones con cupo máximo, ¿Firestore o SQL Connect?**  
+**SQL Connect.** El cupo es una restricción de integridad sobre un *conjunto* de filas ("no más de N
+matrículas para este curso"), y eso es justo lo que un motor relacional resuelve bien:
+- En la clase 2, `Matricula` tiene clave compuesta `(alumnoId, cursoId)` y claves foráneas: PostgreSQL
+  garantiza que no haya duplicados ni inscripciones a cursos o alumnos inexistentes. En Firestore no
+  hay claves foráneas: `cursos/{id}/resenas` existe aunque el curso no exista.
+- El cupo se puede validar en una `@transaction` que cuente las matrículas y aborte si se superó, con
+  aislamiento transaccional del lado del servidor. Las reglas de Firestore **no pueden contar
+  documentos** de una colección: habría que mantener un contador desnormalizado en el curso, actualizarlo
+  en la misma transacción o `batch` que la inscripción y validar con `getAfter()` que
+  `inscriptos <= cupo`. Es posible, pero frágil y con más superficie de error, y bajo mucha concurrencia
+  sobre un mismo documento Firestore limita las escrituras sostenidas por documento.
+- Las consultas típicas ("mis inscripciones con los datos del curso", "inscriptos por curso") son
+  JOINs naturales en SQL. En Firestore obligan a duplicar datos o a hacer varias lecturas.
+
+Firestore es la mejor opción para las reseñas: tiempo real nativo con `onSnapshot`, compensación de
+latencia, cuota gratuita permanente y un modelo en el que "una reseña por persona" sale de la
+estructura de la ruta. Para el cupo, la integridad pesa más que el tiempo real.

@@ -6,6 +6,7 @@ import type { Curso } from "@/lib/cursos";
 import { inscribirme, listarCursos, mensajeDeError } from "@/lib/sqlconnect";
 import { useUsuario } from "@/lib/useUsuario";
 import FiltroCursos from "./FiltroCursos";
+import ResenasCurso from "./ResenasCurso";
 
 type Estado = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "ok"; cursos: Curso[] };
 
@@ -14,6 +15,17 @@ export default function CatalogoSql() {
   const [estado, setEstado] = useState<Estado>({ tipo: "cargando" });
   const [aviso, setAviso] = useState<string | null>(null);
   const [enCurso, setEnCurso] = useState<string | null>(null);
+  // Práctica 4: reseñas desplegables por tarjeta (solo los cursos abiertos tienen listener activo).
+  const [conResenas, setConResenas] = useState<Set<string>>(new Set());
+
+  function alternarResenas(id: string) {
+    setConResenas((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id);
+      else s.add(id);
+      return s;
+    });
+  }
 
   useEffect(() => {
     listarCursos()
@@ -53,15 +65,23 @@ export default function CatalogoSql() {
       )}
       <FiltroCursos
         cursos={estado.cursos}
-        accion={(c) =>
-          usuario ? (
-            <button type="button" className="button button--small" disabled={enCurso === c.id} onClick={() => onInscribirme(c)}>
-              {enCurso === c.id ? "Inscribiendo…" : "Inscribirme"}
-            </button>
-          ) : (
-            <small className="hint">Ingresá para inscribirte</small>
-          )
-        }
+        accion={(c) => (
+          <>
+            <div className="card__botones">
+              {usuario ? (
+                <button type="button" className="button button--small" disabled={enCurso === c.id} onClick={() => onInscribirme(c)}>
+                  {enCurso === c.id ? "Inscribiendo…" : "Inscribirme"}
+                </button>
+              ) : (
+                <small className="hint">Ingresá para inscribirte</small>
+              )}
+              <button type="button" className="link" aria-expanded={conResenas.has(c.id)} onClick={() => alternarResenas(c.id)}>
+                {conResenas.has(c.id) ? "Ocultar reseñas" : "Ver reseñas"}
+              </button>
+            </div>
+            {conResenas.has(c.id) && <ResenasCurso cursoId={c.id} uid={usuario?.uid ?? null} />}
+          </>
+        )}
       />
     </>
   );
