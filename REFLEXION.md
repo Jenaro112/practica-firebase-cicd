@@ -159,3 +159,140 @@ Luego de la configuración de hardening, CSP y estrategia de caché:
 * ✅ Batería de pruebas locales y de seguridad superada al 100%.
 * ✅ Pipelines de CI/CD de preview y producción validados.
 * ✅ Aplicación completamente endurecida y funcional en producción.
+
+---
+---
+
+# Práctica · Clase 2 (lunes) · SQL con Firebase SQL Connect
+**Programación Avanzada - 2026**  
+**Alumno:** Jenaro Galdini  
+**Repositorio:** [https://github.com/Jenaro112/practica-firebase-cicd](https://github.com/Jenaro112/practica-firebase-cicd)  
+**URL de Producción:** [https://practica-cicd-jenaro.web.app](https://practica-cicd-jenaro.web.app)  
+
+## 1. Entregables
+
+| # | Entregable | Valor / Enlace |
+|---|---|---|
+| **1** | Repo con `dataconnect/` completo (L1–L5) | [https://github.com/Jenaro112/practica-firebase-cicd/tree/main/dataconnect](https://github.com/Jenaro112/practica-firebase-cicd/tree/main/dataconnect) |
+| **2** | Salida de `npm run atacar` antes y después | Ver sección 3 |
+| **3** | PR mergeado con el cambio de CSP (L6) | _PENDIENTE: pegar URL del PR_ |
+| **4** | Producción con inscripción funcionando (L7) | [https://practica-cicd-jenaro.web.app/cursos](https://practica-cicd-jenaro.web.app/cursos) |
+| **5** | Respuestas a la reflexión | Sección 4 |
+
+## 2. Qué se implementó
+
+| TODO | Archivo | Solución |
+|---|---|---|
+| **L1** | `dataconnect/schema/schema.gql` | `Matricula @table(key: ["alumno", "curso"])` con `alumno: Alumno!`, `curso: Curso!` (FK `alumnoId`, `cursoId`) y `fecha: Timestamp! @default(expr: "request.time")` |
+| **L2** | `dataconnect/cursos/mutations.gql` | `Inscribirme($cursoId)` · `@auth(level: USER)` · `matricula_upsert(data: { alumnoId_expr: "auth.uid", cursoId: $cursoId })` |
+| **L3** | `dataconnect/cursos/queries.gql` | `MisInscripciones` · `@auth(level: USER)` · `alumno(key: { id_expr: "auth.uid" }) { nombre matriculas: matriculas_on_alumno { fecha curso { id titulo nivel horas } } }` |
+| **L4** | `dataconnect/cursos/queries.gql` | `ListAlumnos` pasó de `PUBLIC` a `NO_ACCESS` |
+| **L5** | `dataconnect/cursos/mutations.gql` | `DarmeDeBaja($cursoId)` · `@auth(level: USER)` · `matricula_delete(key: { alumnoId_expr: "auth.uid", cursoId: $cursoId })` |
+| **L6** | `firebase.json` | `connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasedataconnect.googleapis.com` |
+| **L7** | CLI | `npx firebase deploy --only dataconnect` + `npx firebase dataconnect:execute dataconnect/seed_data.gql` |
+
+**Insert vs upsert (L2).** `matricula_insert` falla la segunda vez porque viola la clave primaria
+`(alumnoId, cursoId)`. `matricula_upsert` hace `INSERT ... ON CONFLICT DO UPDATE`: si la fila ya
+existe la actualiza, así que repetir la operación no falla ni duplica (es idempotente). Se puede
+repetir sin miedo (doble click, reintento de red).
+
+**Restricciones adicionales propuestas (L1, destacado).**
+- La clave compuesta ya genera un índice único sobre `(alumnoId, cursoId)`. Conviene además un
+  índice sobre `cursoId` solo (`@index(fields: ["curso"])`) para consultas del tipo "inscriptos de
+  un curso", que no pueden usar el índice compuesto porque `cursoId` no es su primera columna.
+- **Cupo:** `Curso.cupo` hoy no se controla. Se podría hacer `Inscribirme` como
+  `@transaction` con un paso previo que cuente las matrículas del curso y un `@check` que aborte si
+  `count >= cupo`. Así la regla queda del lado del servidor y no del cliente.
+- `Curso.horas` y `Curso.cupo` deberían ser `> 0` (un `CHECK` en PostgreSQL).
+
+## 3. Salidas de `npm run atacar`
+
+### Antes de corregir (repo de la cátedra, sin L1–L5 y con `ListAlumnos` PUBLIC)
+
+```text
+PENDIENTE: pegar la salida real de `npm run atacar` antes de los cambios
+```
+
+### Después de corregir
+
+```text
+PENDIENTE: pegar la salida real de `npm run atacar` después de los cambios
+```
+
+## 4. Preguntas de reflexión
+
+**1. ¿Por qué ninguna operación de este conector recibe el id del alumno como variable? ¿Qué es IDOR y cómo lo evita `auth.uid`?**  
+Todo lo que manda el cliente lo puede elegir el atacante: el bundle es público y cualquiera puede
+llamar a la API con un script. Si `MisInscripciones` recibiera `$alumnoId` y filtrara por eso,
+alcanzaría con cambiar el valor para leer las inscripciones de otra persona (o, en
+`Inscribirme`/`DarmeDeBaja`, para escribir en nombre de otra). Eso es **IDOR (Insecure Direct Object
+Reference)**: el servidor usa un identificador que viene del cliente sin verificar que el usuario
+tenga permiso sobre ese objeto. Con `auth.uid` la identidad sale del token de Firebase Auth, que el
+servidor valida (firma y vencimiento). El cliente no lo puede falsificar ni cambiar, así que cada
+operación queda limitada a las filas del usuario que llama.
+
+**2. `ListCursos` es PUBLIC y `ListAlumnos` terminó en NO_ACCESS. ¿Qué criterio usaste? ¿Cómo haría el "panel de admin" para listar alumnos?**  
+El criterio es **mínimo privilegio según el tipo de dato**. El catálogo es información que el negocio
+quiere mostrar a cualquiera, incluso sin cuenta, así que `PUBLIC` es lo correcto. `ListAlumnos`
+devuelve datos personales (nombre y email) de todos los alumnos. `USER` no alcanza porque cualquiera
+puede registrarse en 10 segundos, y ningún usuario común necesita ver a los demás. Por eso
+`NO_ACCESS`: ningún cliente la puede ejecutar.
+El panel de admin no debería correr con los permisos del navegador. Opciones:
+- Ejecutarla desde un entorno de confianza con credenciales de administrador (Admin SDK en una Cloud
+  Function / backend propio, o `firebase dataconnect:execute`), que no pasa por `@auth`.
+- Si tiene que ser desde el cliente: asignar un *custom claim* `admin: true` con el Admin SDK y
+  declarar la operación con `@auth(expr: "auth.token.admin == true")`. Así solo la ejecuta quien tenga
+  ese claim, que únicamente puede otorgar el servidor. Idealmente con paginación y sin exponer
+  más campos de los necesarios.
+
+**3. ¿Qué ventaja tiene una clave primaria compuesta en `Matricula` frente a validar duplicados en el código del cliente?**  
+La validación en el cliente se puede saltear (llamando a la API directo) y además tiene una
+condición de carrera: dos requests simultáneos pueden ver "no está inscripto" y crear las dos filas.
+La clave compuesta `(alumnoId, cursoId)` es una restricción de PostgreSQL: la garantiza la base de
+datos, de forma atómica, para cualquier camino de escritura (app, script, admin, migración). Además
+no hace falta un UUID artificial: la identidad de una matrícula *es* el par alumno-curso, y viene
+con su índice único, que acelera las búsquedas. Una clave UUID propia permitiría duplicados salvo que
+se agregara aparte un `UNIQUE(alumnoId, cursoId)`.
+
+**4. La configuración de Firebase (apiKey, etc.) es pública. ¿Por qué eso no compromete la base de datos? ¿Qué capa faltaría para frenar a alguien que usa esa config desde un script?**  
+La `apiKey` no es una credencial de acceso: solo identifica al proyecto ante los servicios de Google.
+No da permisos. Lo que protege los datos es (1) la autenticación (el token de Auth que identifica
+*quién* llama) y (2) la autorización declarada en cada operación (`@auth`). Además el cliente solo
+puede ejecutar operaciones predefinidas, nunca SQL arbitrario. Con la config pública, un atacante
+puede hacer exactamente lo mismo que un usuario legítimo, y nada más (justamente lo que prueba
+`npm run atacar`).
+Lo que falta es verificar *desde dónde* se llama: **App Check**. Con reCAPTCHA Enterprise (web) o
+Play Integrity / App Attest (mobile), la app obtiene una atestación de que es la app real. Con el
+*enforcement* activado, SQL Connect rechaza requests sin un token de App Check válido. Así se frena
+el uso desde scripts o bots, aunque tengan la config.
+
+**5. Comparado con una API REST propia (Express + pg), ¿qué te da SQL Connect y qué perdés?**  
+*Lo que da:* no hay servidor que mantener ni escalar. La inyección SQL queda cerrada por diseño
+(operaciones predefinidas y parametrizadas). La autorización se declara junto a cada operación. Las
+migraciones del esquema salen generadas (`dataconnect:sql:diff`), se genera un SDK tipado, hay
+emuladores locales y se integra nativamente con Firebase Auth. Además es PostgreSQL real
+(relaciones, transacciones, índices).
+*Lo que se pierde:* flexibilidad. La lógica de negocio compleja (cupos con reglas raras, pagos,
+mails, llamadas a terceros) no entra fácil en GraphQL declarativo y termina en Cloud Functions.
+También se pierde control fino del SQL y de las optimizaciones, y hay *vendor lock-in* con Google
+Cloud. El modelo de costos depende de Cloud SQL (en Spark la prueba dura 90 días). Debuggear y
+observar es más difícil, y los patrones de autorización están limitados a lo que permite `@auth`
+(con Express se puede programar cualquier regla).
+Frente a **Firestore Rules**, en SQL Connect la autorización vive por *operación* y no por
+documento: en Firestore el cliente arma consultas libres y las reglas validan cada documento leído o
+escrito, mientras que acá el cliente no puede inventar consultas. Las reglas de Firestore son más
+expresivas para validar *datos* (`request.resource.data`). SQL Connect gana en modelo relacional e
+integridad referencial.
+
+**6. ¿Por qué no alcanzó con la CSP de la clase 1 y por qué conviene listar dominios exactos en `connect-src`?**  
+En la clase 1 la app no hacía requests a terceros, así que `connect-src 'self'` era suficiente.
+Ahora el navegador hace `fetch` a Firebase Auth (`identitytoolkit.googleapis.com` para login y
+registro, `securetoken.googleapis.com` para refrescar el token) y a SQL Connect
+(`firebasedataconnect.googleapis.com`). Con `'self'` solo, el navegador bloquea esas conexiones
+(`Refused to connect`) y la app no carga el catálogo ni permite iniciar sesión.
+Hay que listar dominios exactos y no `https://*.googleapis.com` porque ese comodín habilita cientos
+de APIs de Google, incluidas algunas donde un atacante puede tener su propio proyecto y recibir datos
+(por ejemplo, Cloud Storage en `storage.googleapis.com`). Si alguien lograra inyectar un script (XSS),
+`connect-src` es la última barrera contra la exfiltración de datos. Con un comodín amplio podría
+mandar tokens o datos personales a un endpoint de Google que controle. Con la lista exacta, solo se
+puede hablar con los servicios que la app realmente usa (mínimo privilegio también en la red).
