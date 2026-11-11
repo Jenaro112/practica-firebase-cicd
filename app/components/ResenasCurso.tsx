@@ -28,7 +28,10 @@ export default function ResenasCurso({ cursoId, uid }: { cursoId: string; uid: s
   }, [cursoId, uid]);
 
   // La agregación no admite listeners: se vuelve a pedir cuando cambia la lista.
-  const firma = resenas.map((r) => `${r.uid}:${r.puntaje}`).join(",");
+  // La firma incluye `pendiente`: así se recalcula también cuando el servidor CONFIRMA una
+  // escritura propia (si se pidiera solo mientras está pendiente, el servidor todavía
+  // devolvería el promedio viejo).
+  const firma = resenas.map((r) => `${r.uid}:${r.puntaje}:${r.pendiente ? "p" : "ok"}`).join(",");
   useEffect(() => {
     resumenDe(cursoId)
       .then(setResumen)

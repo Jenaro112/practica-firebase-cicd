@@ -338,7 +338,7 @@ puede hablar con los servicios que la app realmente usa (mínimo privilegio tamb
 |---|---|---|
 | **1** | `lib/resenas.ts`, `app/components/ResenasCurso.tsx`, `firestore.rules`, `firestore.indexes.json`, `tests/` | [Repositorio](https://github.com/Jenaro112/practica-firebase-cicd) |
 | **2** | Salida de `npm run test:reglas` y prueba de "hacerlo fallar" | Ver abajo |
-| **3** | Actualización en tiempo real entre dos navegadores | _PENDIENTE: capturas o video_ |
+| **3** | Actualización en tiempo real entre dos navegadores | [Captura](docs/capturas/tiempo-real.png) · ver sección "Tiempo real" |
 | **4** | PR mergeado con reglas, índice y CSP | _PENDIENTE: URL del PR_ |
 | **5** | Respuestas a la reflexión | Ver abajo |
 
@@ -356,6 +356,21 @@ puede hablar con los servicios que la app realmente usa (mínimo privilegio tamb
 | 7 | `tests/reglas.test.mjs` | Los 8 casos del enunciado + 7 propios: edición ajena, borrado ajeno, borrado sin login, tipos/tamaños (puntaje `"5"`, texto > 500, autor > 80 o vacío, límites exactos 500/80 aceptados), campo faltante, campo extra al editar, otras colecciones cerradas. |
 | 8 | `firestore.indexes.json` | Índice compuesto `resenas`: `puntaje ASC` + `creadaEn DESC`. |
 | 9 | `firebase.json` | Clave `firestore` (rules + indexes), emulador en el puerto 8080 y `https://firestore.googleapis.com` en `connect-src`. |
+
+### Tiempo real entre dos navegadores
+
+![Ana (Safari, izquierda) y Bruno (navegación privada, derecha) viendo el mismo curso](docs/capturas/tiempo-real.png)
+
+Ana (izquierda) editó su reseña a ★★★★★ "Muy claro, buenos ejemplos de normalización" y la lista de
+Bruno (derecha) se actualizó sola por `onSnapshot`, sin recargar.
+
+**Evidencia de la limitación de la agregación:** en la ventana de Ana el resumen quedó en
+"★ 3.0 (1)" (el puntaje anterior) mientras en la de Bruno ya decía "★ 5.0 (1)". El componente
+pidió `getAggregateFromServer` cuando la lista cambió *localmente* (compensación de latencia),
+antes de que el servidor confirmara la escritura, y el servidor todavía devolvió el promedio viejo.
+Como la agregación no admite listeners, nada lo volvió a pedir. **Corrección:** la "firma" que
+dispara el recálculo ahora incluye `hasPendingWrites`, así el resumen se pide de nuevo cuando la
+escritura pasa de pendiente a confirmada.
 
 ### Salida de `npm run test:reglas`
 
